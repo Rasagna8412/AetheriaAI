@@ -1,6 +1,8 @@
 package com.aetheria.ai.data.network
 
+import android.app.DownloadManager
 import android.content.Context
+import android.net.Uri
 import com.aetheria.ai.data.model.DownloadStatus
 import com.aetheria.ai.data.model.OnDemandModel
 import kotlinx.coroutines.Dispatchers
@@ -22,12 +24,11 @@ import java.util.concurrent.TimeUnit
 
 class ModelDownloader(private val context: Context) {
 
-    // OkHttpClient configured specifically for multi-gigabyte CDN streaming
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
-        .connectTimeout(45, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)   // 0 means no timeout while streaming chunks
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .writeTimeout(0, TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
         .build()
@@ -36,7 +37,6 @@ class ModelDownloader(private val context: Context) {
 
     val modelsDir: File
         get() {
-            // Prioritize external app storage for gigabytes of free disk space
             val externalDir = context.getExternalFilesDir("models")
             val targetDir = externalDir ?: File(context.filesDir, "models")
             if (!targetDir.exists()) targetDir.mkdirs()
@@ -51,15 +51,20 @@ class ModelDownloader(private val context: Context) {
     }
 
     fun isModelDownloaded(model: OnDemandModel): Boolean {
+        if (model.isBuiltIn) return true
         val file = getLocalModelFile(model)
-        // Hugging Face GGUF models are always > 50 MB
-        return file.exists() && file.length() > 50_000_000
+        return file.exists() && file.length() > 10_000_000 // Valid model weights file
     }
 
     suspend fun downloadModel(
         model: OnDemandModel,
-        onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
+        onProgress: suspend (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (model.isBuiltIn) {
+            val dummyFile = File(modelsDir, model.fileName)
+            return@withContext Result.success(dummyFile)
+        }
+
         val targetFile = getLocalModelFile(model)
         val tempFile = File(modelsDir, "${model.fileName}.tmp")
 
@@ -75,7 +80,7 @@ class ModelDownloader(private val context: Context) {
 
             val request = Request.Builder()
                 .url(model.downloadUrl)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; RavenAI)")
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; RavenAI Mobile)")
                 .header("Accept", "*/*")
                 .build()
 
@@ -97,7 +102,6 @@ class ModelDownloader(private val context: Context) {
                 val inputStream: InputStream = body.byteStream()
                 val outputStream = FileOutputStream(tempFile)
 
-                // High-performance 64KB buffer
                 val buffer = ByteArray(64 * 1024)
                 var bytesRead: Int
 
@@ -111,8 +115,7 @@ class ModelDownloader(private val context: Context) {
                     val progress = if (contentLength > 0) bytesCopied.toFloat() / contentLength else 0f
                     val now = System.currentTimeMillis()
 
-                    // Throttle updates to at most once every 200ms or 1% delta to prevent Compose UI freeze
-                    if (now - lastUpdateTime > 200 || progress - lastReportedProgress >= 0.01f || progress >= 1f) {
+                    if (now - lastUpdateTime > 250 || progress - lastReportedProgress >= 0.01f || progress >= 1f) {
                         lastUpdateTime = now
                         lastReportedProgress = progress
                         onProgress(progress, bytesCopied, contentLength)
@@ -133,7 +136,21 @@ class ModelDownloader(private val context: Context) {
 
                 if (tempFile.exists() && tempFile.length() > 0) {
                     if (targetFile.exists()) targetFile.delete()
-                    if (tempFile.renameTo(targetFile)) {
+
+                    val success = if (!tempFile.renameTo(targetFile)) {
+                        // Safe fallback copy
+                        tempFile.inputStream().use { input ->
+                            targetFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        tempFile.delete()
+                        true
+                    } else {
+                        true
+                    }
+
+                    if (success && targetFile.exists()) {
                         val readyState = model.copy(
                             status = DownloadStatus.DOWNLOADED,
                             downloadProgress = 1f,
@@ -155,7 +172,7 @@ class ModelDownloader(private val context: Context) {
             if (tempFile.exists()) tempFile.delete()
 
             val friendlyMsg = when (e) {
-                is UnknownHostException -> "No internet connection. Please connect to Wi-Fi."
+                is UnknownHostException -> "No internet connection. Please verify your Wi-Fi or mobile data."
                 is SocketTimeoutException -> "Network timed out while downloading. Please retry."
                 else -> e.localizedMessage ?: "Download failed: ${e.message}"
             }
@@ -172,12 +189,33 @@ class ModelDownloader(private val context: Context) {
         }
     }
 
+    /**
+     * Triggers Android's native system background DownloadManager.
+     * Shows a real progress notification in the Android status bar that survives app closing.
+     */
+    fun enqueueSystemDownload(model: OnDemandModel): Long {
+        if (model.isBuiltIn || model.downloadUrl.isBlank()) return -1L
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val targetFile = getLocalModelFile(model)
+
+        val request = DownloadManager.Request(Uri.parse(model.downloadUrl))
+            .setTitle("Raven: ${model.name}")
+            .setDescription("Downloading Hugging Face weights (${model.sizeFormatted})")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationUri(Uri.fromFile(targetFile))
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
+
+        return downloadManager.enqueue(request)
+    }
+
     fun cancelDownload(modelId: String) {
         activeCalls[modelId]?.cancel()
         activeCalls.remove(modelId)
     }
 
     suspend fun deleteModel(model: OnDemandModel): Boolean = withContext(Dispatchers.IO) {
+        if (model.isBuiltIn) return@withContext false
         val file = getLocalModelFile(model)
         val deleted = if (file.exists()) file.delete() else true
         if (deleted) {

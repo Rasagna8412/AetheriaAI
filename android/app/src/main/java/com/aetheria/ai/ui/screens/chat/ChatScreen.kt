@@ -54,9 +54,9 @@ fun ChatScreen(
     var showModelMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size, currentStreamingText) {
-        if (messages.isNotEmpty() || currentStreamingText.isNotEmpty()) {
-            listState.animateScrollToItem((messages.size).coerceAtLeast(0))
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
         }
     }
 

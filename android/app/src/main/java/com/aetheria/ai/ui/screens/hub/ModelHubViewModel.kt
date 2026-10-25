@@ -9,8 +9,10 @@ import com.aetheria.ai.data.model.DownloadStatus
 import com.aetheria.ai.data.model.OnDemandModel
 import com.aetheria.ai.data.network.CloudApiClient
 import com.aetheria.ai.data.network.ModelDownloader
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ModelHubViewModel(
     private val customModelDao: CustomModelDao,
@@ -25,8 +27,8 @@ class ModelHubViewModel(
                 model.copy(
                     status = DownloadStatus.DOWNLOADED,
                     downloadProgress = 1f,
-                    downloadedBytes = file.length(),
-                    totalBytes = file.length(),
+                    downloadedBytes = if (model.isBuiltIn) 0L else file.length(),
+                    totalBytes = if (model.isBuiltIn) 0L else file.length(),
                     localFilePath = file.absolutePath
                 )
             } else {
@@ -78,41 +80,62 @@ class ModelHubViewModel(
 
     fun downloadOnDemandModel(model: OnDemandModel) {
         viewModelScope.launch {
-            updateOnDemandModelInList(
-                model.copy(status = DownloadStatus.DOWNLOADING, downloadProgress = 0f, errorMessage = null)
-            )
-
-            modelDownloader.downloadModel(model) { progress, downloaded, total ->
+            withContext(Dispatchers.Main) {
                 updateOnDemandModelInList(
-                    model.copy(
-                        status = DownloadStatus.DOWNLOADING,
-                        downloadProgress = progress,
-                        downloadedBytes = downloaded,
-                        totalBytes = total,
-                        errorMessage = null
-                    )
-                )
-            }.onSuccess { file ->
-                updateOnDemandModelInList(
-                    model.copy(
-                        status = DownloadStatus.DOWNLOADED,
-                        downloadProgress = 1f,
-                        downloadedBytes = file.length(),
-                        totalBytes = file.length(),
-                        localFilePath = file.absolutePath,
-                        errorMessage = null
-                    )
-                )
-            }.onFailure { err ->
-                val errorMsg = err.localizedMessage ?: err.message ?: "Download failed"
-                updateOnDemandModelInList(
-                    model.copy(
-                        status = DownloadStatus.ERROR,
-                        downloadProgress = 0f,
-                        errorMessage = errorMsg
-                    )
+                    model.copy(status = DownloadStatus.DOWNLOADING, downloadProgress = 0f, errorMessage = null)
                 )
             }
+
+            modelDownloader.downloadModel(model) { progress, downloaded, total ->
+                withContext(Dispatchers.Main) {
+                    updateOnDemandModelInList(
+                        model.copy(
+                            status = DownloadStatus.DOWNLOADING,
+                            downloadProgress = progress,
+                            downloadedBytes = downloaded,
+                            totalBytes = total,
+                            errorMessage = null
+                        )
+                    )
+                }
+            }.onSuccess { file ->
+                withContext(Dispatchers.Main) {
+                    updateOnDemandModelInList(
+                        model.copy(
+                            status = DownloadStatus.DOWNLOADED,
+                            downloadProgress = 1f,
+                            downloadedBytes = file.length(),
+                            totalBytes = file.length(),
+                            localFilePath = file.absolutePath,
+                            errorMessage = null
+                        )
+                    )
+                }
+            }.onFailure { err ->
+                val errorMsg = err.localizedMessage ?: err.message ?: "Download failed"
+                withContext(Dispatchers.Main) {
+                    updateOnDemandModelInList(
+                        model.copy(
+                            status = DownloadStatus.ERROR,
+                            downloadProgress = 0f,
+                            errorMessage = errorMsg
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadViaSystemManager(model: OnDemandModel) {
+        val downloadId = modelDownloader.enqueueSystemDownload(model)
+        if (downloadId > 0) {
+            updateOnDemandModelInList(
+                model.copy(
+                    status = DownloadStatus.DOWNLOADING,
+                    downloadProgress = 0.05f,
+                    errorMessage = null
+                )
+            )
         }
     }
 
@@ -130,15 +153,17 @@ class ModelHubViewModel(
     fun deleteOnDemandModel(model: OnDemandModel) {
         viewModelScope.launch {
             modelDownloader.deleteModel(model)
-            updateOnDemandModelInList(
-                model.copy(
-                    status = DownloadStatus.NOT_DOWNLOADED,
-                    downloadProgress = 0f,
-                    downloadedBytes = 0L,
-                    localFilePath = null,
-                    errorMessage = null
+            withContext(Dispatchers.Main) {
+                updateOnDemandModelInList(
+                    model.copy(
+                        status = DownloadStatus.NOT_DOWNLOADED,
+                        downloadProgress = 0f,
+                        downloadedBytes = 0L,
+                        localFilePath = null,
+                        errorMessage = null
+                    )
                 )
-            )
+            }
         }
     }
 

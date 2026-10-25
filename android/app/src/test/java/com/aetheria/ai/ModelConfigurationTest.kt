@@ -10,16 +10,17 @@ class ModelConfigurationTest {
     @Test
     fun testOnDemandCatalogContainsUserSelectedModels() {
         val models = DefaultOnDemandCatalog.models
-        assertEquals(4, models.size)
+        assertEquals(5, models.size)
 
         val modelIds = models.map { it.id }
+        assertTrue(modelIds.contains("raven-nano-cortex"))
         assertTrue(modelIds.contains("smollm2-360m"))
         assertTrue(modelIds.contains("smollm2-1.7b"))
         assertTrue(modelIds.contains("dolphin-3.0-1b"))
         assertTrue(modelIds.contains("gemma-2-2b"))
 
-        // All models must have direct Hugging Face download URLs in GGUF format
-        models.forEach { model ->
+        // Downloadable models must have direct Hugging Face download URLs in GGUF format
+        models.filter { !it.isBuiltIn }.forEach { model ->
             assertTrue(model.downloadUrl.startsWith("https://huggingface.co/"))
             assertTrue(model.fileName.endsWith(".gguf"))
             assertTrue(model.quantization.isNotEmpty())

@@ -12,12 +12,8 @@ import com.aetheria.ai.data.network.CloudApiClient
 import com.aetheria.ai.data.network.ModelDownloader
 import com.aetheria.ai.data.network.NetworkMonitor
 import com.aetheria.ai.domain.engine.OfflineInferenceEngine
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -39,14 +35,16 @@ class ChatViewModel(
 
     val currentSessionId = MutableStateFlow(UUID.randomUUID().toString())
 
-    val messages: StateFlow<List<ChatMessageEntity>> = chatDao
-        .getMessagesForSession(currentSessionId.value)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val messages: StateFlow<List<ChatMessageEntity>> = currentSessionId
+        .flatMapLatest { sessionId -> chatDao.getMessagesForSession(sessionId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val customModels: StateFlow<List<CustomModelEntity>> = customModelDao
         .getAllModels()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Defaults to the built-in instant nano model so the app works immediately out of the box!
     private val _selectedModel = MutableStateFlow<SelectedModel>(
         SelectedModel.Offline(DefaultOnDemandCatalog.models[0])
     )
@@ -83,8 +81,11 @@ class ChatViewModel(
 
             when (val model = _selectedModel.value) {
                 is SelectedModel.Offline -> {
-                    if (!modelDownloader.isModelDownloaded(model.model)) {
-                        val helperMsg = "⚠️ **${model.model.name}** is not downloaded to this device yet.\n\nTo use this model 100% offline:\n1. Open the **Model Hub** (tap the Hub icon in top right).\n2. Tap **Download Model** (${model.model.sizeFormatted}).\n\n*(Or select a Cloud Model from the top dropdown to chat online right now!)*"
+                    val file = modelDownloader.getLocalModelFile(model.model)
+
+                    // Check if model needs download and is missing
+                    if (!model.model.isBuiltIn && !modelDownloader.isModelDownloaded(model.model)) {
+                        val helperMsg = "⚠️ **${model.model.name}** is not downloaded yet.\n\n• Open the **Model Hub** (top-right icon) to download it (${model.model.sizeFormatted}).\n• Or switch to **⚡ Raven Nano Cortex (Built-in)** in the top dropdown for instant offline chat!"
                         val assistantMessage = ChatMessageEntity(
                             sessionId = currentSessionId.value,
                             role = "assistant",
@@ -97,7 +98,6 @@ class ChatViewModel(
                         return@launch
                     }
 
-                    val file = modelDownloader.getLocalModelFile(model.model)
                     val responseBuffer = StringBuilder()
 
                     offlineEngine.runOfflineInference(model.model, file, content)
@@ -124,17 +124,25 @@ class ChatViewModel(
 
                 is SelectedModel.Online -> {
                     if (!isOnline.value) {
-                        _currentStreamingText.value = "Device is currently offline. Please connect to internet or switch to an Offline model."
+                        val offlineMsg = "📴 **Device is currently Offline**.\n\nPlease connect to Wi-Fi/data, or switch to an Offline model from the top dropdown."
+                        val assistantMessage = ChatMessageEntity(
+                            sessionId = currentSessionId.value,
+                            role = "assistant",
+                            content = offlineMsg,
+                            modelUsed = model.model.name,
+                            isOffline = true
+                        )
+                        chatDao.insertMessage(assistantMessage)
                         _isGenerating.value = false
                         return@launch
                     }
 
                     if (model.model.apiKey.isBlank()) {
-                        val helperMsg = "⚠️ API Key required for **${model.model.name}**.\n\nPlease open the **Model Hub**, edit this model, and enter your API key to chat with cloud models."
+                        val keyMsg = "⚠️ **API Key Required** for ${model.model.name}.\n\nPlease open the **Model Hub**, tap edit on this model, and paste your API key to chat with cloud models."
                         val assistantMessage = ChatMessageEntity(
                             sessionId = currentSessionId.value,
                             role = "assistant",
-                            content = helperMsg,
+                            content = keyMsg,
                             modelUsed = model.model.name,
                             isOffline = false
                         )

@@ -219,6 +219,7 @@ fun ModelHubScreen(
                             RavenOfflineCard(
                                 model = model,
                                 onDownload = { viewModel.downloadOnDemandModel(model) },
+                                onSystemDownload = { viewModel.downloadViaSystemManager(model) },
                                 onCancel = { viewModel.cancelDownload(model) },
                                 onDelete = { viewModel.deleteOnDemandModel(model) }
                             )
@@ -364,6 +365,7 @@ fun ModelHubScreen(
 fun RavenOfflineCard(
     model: OnDemandModel,
     onDownload: () -> Unit,
+    onSystemDownload: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -384,10 +386,15 @@ fun RavenOfflineCard(
                         modifier = Modifier
                             .size(34.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(RavenCyan.copy(alpha = 0.15f)),
+                            .background(if (model.isBuiltIn) RavenAmber.copy(alpha = 0.2f) else RavenCyan.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.PhoneAndroid, null, tint = RavenCyan, modifier = Modifier.size(18.dp))
+                        Icon(
+                            if (model.isBuiltIn) Icons.Default.Bolt else Icons.Default.PhoneAndroid,
+                            null,
+                            tint = if (model.isBuiltIn) RavenAmber else RavenCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
@@ -406,7 +413,20 @@ fun RavenOfflineCard(
                     }
                 }
 
-                if (model.isUncensored) {
+                if (model.isBuiltIn) {
+                    Surface(
+                        color = RavenAmber.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "Instant Ready",
+                            color = RavenAmber,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+                } else if (model.isUncensored) {
                     Surface(
                         color = RavenRose.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(8.dp)
@@ -444,15 +464,31 @@ fun RavenOfflineCard(
 
             when (model.status) {
                 DownloadStatus.NOT_DOWNLOADED -> {
-                    Button(
-                        onClick = onDownload,
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = RavenViolet, contentColor = RavenTextPrimary),
-                        shape = RoundedCornerShape(14.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Download Model (${model.sizeFormatted})", fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = onDownload,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = RavenViolet, contentColor = RavenTextPrimary),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Download Model (${model.sizeFormatted})", fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = onSystemDownload,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, RavenBorder)
+                        ) {
+                            Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(14.dp), tint = RavenSky)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Download in Background (Notification)", fontSize = 11.sp, color = RavenSky)
+                        }
                     }
                 }
                 DownloadStatus.DOWNLOADING -> {
@@ -498,19 +534,32 @@ fun RavenOfflineCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = RavenEmerald, modifier = Modifier.size(18.dp))
+                            Icon(
+                                if (model.isBuiltIn) Icons.Default.Bolt else Icons.Default.CheckCircle,
+                                null,
+                                tint = if (model.isBuiltIn) RavenAmber else RavenEmerald,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("100% Offline Ready", color = RavenEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (model.isBuiltIn) "Instant Engine Ready" else "100% Offline Ready",
+                                color = if (model.isBuiltIn) RavenAmber else RavenEmerald,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
-                        OutlinedButton(
-                            onClick = onDelete,
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            border = androidx.compose.foundation.BorderStroke(0.8.dp, RavenRose.copy(alpha = 0.5f))
-                        ) {
-                            Icon(Icons.Default.DeleteOutline, null, tint = RavenRose, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Delete File", color = RavenRose, fontSize = 11.sp)
+
+                        if (!model.isBuiltIn) {
+                            OutlinedButton(
+                                onClick = onDelete,
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.8.dp, RavenRose.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, null, tint = RavenRose, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Delete File", color = RavenRose, fontSize = 11.sp)
+                            }
                         }
                     }
                 }

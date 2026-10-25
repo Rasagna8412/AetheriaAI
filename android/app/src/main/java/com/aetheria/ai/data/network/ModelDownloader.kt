@@ -1,8 +1,7 @@
 package com.aetheria.ai.data.network
 
-import android.app.DownloadManager
 import android.content.Context
-import android.net.Uri
+import android.os.PowerManager
 import com.aetheria.ai.data.model.DownloadStatus
 import com.aetheria.ai.data.model.OnDemandModel
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +27,7 @@ class ModelDownloader(private val context: Context) {
         .followRedirects(true)
         .followSslRedirects(true)
         .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS) // Unlimited chunk streaming timeout
         .writeTimeout(0, TimeUnit.MILLISECONDS)
         .retryOnConnectionFailure(true)
         .build()
@@ -39,7 +38,9 @@ class ModelDownloader(private val context: Context) {
         get() {
             val externalDir = context.getExternalFilesDir("models")
             val targetDir = externalDir ?: File(context.filesDir, "models")
-            if (!targetDir.exists()) targetDir.mkdirs()
+            if (!targetDir.exists()) {
+                targetDir.mkdirs()
+            }
             return targetDir
         }
 
@@ -53,7 +54,7 @@ class ModelDownloader(private val context: Context) {
     fun isModelDownloaded(model: OnDemandModel): Boolean {
         if (model.isBuiltIn) return true
         val file = getLocalModelFile(model)
-        return file.exists() && file.length() > 10_000_000 // Valid model weights file
+        return file.exists() && file.length() > 5_000_000 // Valid model file (>5MB)
     }
 
     suspend fun downloadModel(
@@ -65,44 +66,63 @@ class ModelDownloader(private val context: Context) {
             return@withContext Result.success(dummyFile)
         }
 
+        // Acquire partial WakeLock so Android doesn't kill Wi-Fi when screen turns off
+        val powerManager = try { context.getSystemService(Context.POWER_SERVICE) as? PowerManager } catch (_: Exception) { null }
+        val wakeLock = try { powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Raven::Downloader") } catch (_: Exception) { null }
+        try { wakeLock?.acquire(30 * 60 * 1000L) } catch (_: Exception) { }
+
         val targetFile = getLocalModelFile(model)
         val tempFile = File(modelsDir, "${model.fileName}.tmp")
+        tempFile.parentFile?.mkdirs()
+
+        // Check if there is an existing partial download to resume
+        val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
 
         try {
             updateModelState(
                 model.copy(
                     status = DownloadStatus.DOWNLOADING,
-                    downloadProgress = 0f,
-                    downloadedBytes = 0L,
+                    downloadProgress = if (existingBytes > 0 && model.totalBytes > 0) existingBytes.toFloat() / model.totalBytes else 0f,
+                    downloadedBytes = existingBytes,
                     errorMessage = null
                 )
             )
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(model.downloadUrl)
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; RavenAI Mobile)")
                 .header("Accept", "*/*")
-                .build()
 
+            // Enable HTTP Range Resume if partial file exists
+            if (existingBytes > 0) {
+                requestBuilder.header("Range", "bytes=$existingBytes-")
+            }
+
+            val request = requestBuilder.build()
             val call = client.newCall(request)
             activeCalls[model.id] = call
 
             call.execute().use { response ->
-                if (!response.isSuccessful) {
+                val isPartial = response.code == 206
+                val isSuccess = response.isSuccessful
+
+                if (!isSuccess && !isPartial) {
                     val errorMsg = "Server error (HTTP ${response.code}): ${response.message}"
-                    val errorState = model.copy(status = DownloadStatus.ERROR, errorMessage = errorMsg)
-                    updateModelState(errorState)
+                    updateModelState(model.copy(status = DownloadStatus.ERROR, errorMessage = errorMsg))
                     return@withContext Result.failure(IOException(errorMsg))
                 }
 
-                val body = response.body ?: return@withContext Result.failure(IOException("Received empty response from server"))
+                val body = response.body ?: return@withContext Result.failure(IOException("Empty response body from Hugging Face"))
                 val contentLength = body.contentLength()
-                var bytesCopied: Long = 0
+                val totalExpectedBytes = if (isPartial) existingBytes + contentLength else contentLength
+
+                var bytesCopied = if (isPartial) existingBytes else 0L
+                val appendMode = isPartial && existingBytes > 0
 
                 val inputStream: InputStream = body.byteStream()
-                val outputStream = FileOutputStream(tempFile)
+                val outputStream = FileOutputStream(tempFile, appendMode)
 
-                val buffer = ByteArray(64 * 1024)
+                val buffer = ByteArray(64 * 1024) // 64KB high-speed buffer
                 var bytesRead: Int
 
                 var lastUpdateTime = 0L
@@ -112,19 +132,19 @@ class ModelDownloader(private val context: Context) {
                     outputStream.write(buffer, 0, bytesRead)
                     bytesCopied += bytesRead
 
-                    val progress = if (contentLength > 0) bytesCopied.toFloat() / contentLength else 0f
+                    val progress = if (totalExpectedBytes > 0) bytesCopied.toFloat() / totalExpectedBytes else 0f
                     val now = System.currentTimeMillis()
 
-                    if (now - lastUpdateTime > 250 || progress - lastReportedProgress >= 0.01f || progress >= 1f) {
+                    if (now - lastUpdateTime > 200 || progress - lastReportedProgress >= 0.01f || progress >= 1f) {
                         lastUpdateTime = now
                         lastReportedProgress = progress
-                        onProgress(progress, bytesCopied, contentLength)
+                        onProgress(progress, bytesCopied, totalExpectedBytes)
                         updateModelState(
                             model.copy(
                                 status = DownloadStatus.DOWNLOADING,
                                 downloadProgress = progress,
                                 downloadedBytes = bytesCopied,
-                                totalBytes = contentLength
+                                totalBytes = totalExpectedBytes
                             )
                         )
                     }
@@ -137,8 +157,7 @@ class ModelDownloader(private val context: Context) {
                 if (tempFile.exists() && tempFile.length() > 0) {
                     if (targetFile.exists()) targetFile.delete()
 
-                    val success = if (!tempFile.renameTo(targetFile)) {
-                        // Safe fallback copy
+                    val finalized = if (!tempFile.renameTo(targetFile)) {
                         tempFile.inputStream().use { input ->
                             targetFile.outputStream().use { output ->
                                 input.copyTo(output)
@@ -150,7 +169,7 @@ class ModelDownloader(private val context: Context) {
                         true
                     }
 
-                    if (success && targetFile.exists()) {
+                    if (finalized && targetFile.exists()) {
                         val readyState = model.copy(
                             status = DownloadStatus.DOWNLOADED,
                             downloadProgress = 1f,
@@ -169,12 +188,10 @@ class ModelDownloader(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
-            if (tempFile.exists()) tempFile.delete()
-
             val friendlyMsg = when (e) {
-                is UnknownHostException -> "No internet connection. Please verify your Wi-Fi or mobile data."
-                is SocketTimeoutException -> "Network timed out while downloading. Please retry."
-                else -> e.localizedMessage ?: "Download failed: ${e.message}"
+                is UnknownHostException -> "No internet connection. Please verify your Wi-Fi or data."
+                is SocketTimeoutException -> "Network timed out. Tap 'Resume' to continue downloading."
+                else -> e.localizedMessage ?: "Download interrupted: ${e.message}"
             }
 
             updateModelState(
@@ -186,27 +203,12 @@ class ModelDownloader(private val context: Context) {
             return@withContext Result.failure(e)
         } finally {
             activeCalls.remove(model.id)
+            try {
+                if (wakeLock != null && wakeLock.isHeld) {
+                    wakeLock.release()
+                }
+            } catch (_: Exception) { }
         }
-    }
-
-    /**
-     * Triggers Android's native system background DownloadManager.
-     * Shows a real progress notification in the Android status bar that survives app closing.
-     */
-    fun enqueueSystemDownload(model: OnDemandModel): Long {
-        if (model.isBuiltIn || model.downloadUrl.isBlank()) return -1L
-        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val targetFile = getLocalModelFile(model)
-
-        val request = DownloadManager.Request(Uri.parse(model.downloadUrl))
-            .setTitle("Raven: ${model.name}")
-            .setDescription("Downloading Hugging Face weights (${model.sizeFormatted})")
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationUri(Uri.fromFile(targetFile))
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
-
-        return downloadManager.enqueue(request)
     }
 
     fun cancelDownload(modelId: String) {
@@ -217,7 +219,11 @@ class ModelDownloader(private val context: Context) {
     suspend fun deleteModel(model: OnDemandModel): Boolean = withContext(Dispatchers.IO) {
         if (model.isBuiltIn) return@withContext false
         val file = getLocalModelFile(model)
+        val tempFile = File(modelsDir, "${model.fileName}.tmp")
+
+        if (tempFile.exists()) tempFile.delete()
         val deleted = if (file.exists()) file.delete() else true
+
         if (deleted) {
             updateModelState(
                 model.copy(

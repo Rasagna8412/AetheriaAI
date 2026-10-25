@@ -126,17 +126,22 @@ class ModelHubViewModel(
         }
     }
 
-    fun downloadViaSystemManager(model: OnDemandModel) {
-        val downloadId = modelDownloader.enqueueSystemDownload(model)
-        if (downloadId > 0) {
-            updateOnDemandModelInList(
+    fun refreshModelStatus() {
+        val updatedList = _onDemandModels.value.map { model ->
+            if (modelDownloader.isModelDownloaded(model)) {
+                val file = modelDownloader.getLocalModelFile(model)
                 model.copy(
-                    status = DownloadStatus.DOWNLOADING,
-                    downloadProgress = 0.05f,
-                    errorMessage = null
+                    status = DownloadStatus.DOWNLOADED,
+                    downloadProgress = 1f,
+                    downloadedBytes = if (model.isBuiltIn) 0L else file.length(),
+                    totalBytes = if (model.isBuiltIn) 0L else file.length(),
+                    localFilePath = file.absolutePath
                 )
-            )
+            } else {
+                model
+            }
         }
+        _onDemandModels.value = updatedList
     }
 
     fun cancelDownload(model: OnDemandModel) {

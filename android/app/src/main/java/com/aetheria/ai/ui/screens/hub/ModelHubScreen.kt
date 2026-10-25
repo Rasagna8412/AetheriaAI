@@ -1,5 +1,7 @@
 package com.aetheria.ai.ui.screens.hub
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +38,7 @@ fun ModelHubScreen(
     viewModel: ModelHubViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -219,7 +223,12 @@ fun ModelHubScreen(
                             RavenOfflineCard(
                                 model = model,
                                 onDownload = { viewModel.downloadOnDemandModel(model) },
-                                onSystemDownload = { viewModel.downloadViaSystemManager(model) },
+                                onOpenBrowser = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(model.downloadUrl))
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) { }
+                                },
                                 onCancel = { viewModel.cancelDownload(model) },
                                 onDelete = { viewModel.deleteOnDemandModel(model) }
                             )
@@ -365,7 +374,7 @@ fun ModelHubScreen(
 fun RavenOfflineCard(
     model: OnDemandModel,
     onDownload: () -> Unit,
-    onSystemDownload: () -> Unit,
+    onOpenBrowser: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -480,14 +489,14 @@ fun RavenOfflineCard(
                         }
 
                         OutlinedButton(
-                            onClick = onSystemDownload,
+                            onClick = onOpenBrowser,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp),
                             border = androidx.compose.foundation.BorderStroke(0.8.dp, RavenBorder)
                         ) {
-                            Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(14.dp), tint = RavenSky)
+                            Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(15.dp), tint = RavenSky)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Download in Background (Notification)", fontSize = 11.sp, color = RavenSky)
+                            Text("Download in Chrome / Browser", fontSize = 11.sp, color = RavenSky)
                         }
                     }
                 }

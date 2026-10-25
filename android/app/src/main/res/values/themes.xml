@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.AetheriaAI" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#121316</item>
+        <item name="android:navigationBarColor">#121316</item>
+    </style>
+</resources>

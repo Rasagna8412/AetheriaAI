@@ -1,0 +1,65 @@
+name: Build and Verify Aetheria AI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  backend-test:
+    name: Backend API Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Tests
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/backend
+          python -m pytest backend/tests -v
+
+  android-build:
+    name: Android APK Compilation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make Gradle Wrapper Executable
+        run: chmod +x android/gradlew || true
+
+      - name: Run Android Unit Tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aetheria-AI-v1.0-debug.apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14

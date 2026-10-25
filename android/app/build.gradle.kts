@@ -22,7 +22,7 @@ android {
         }
 
         // Output APK naming
-        setProperty("archivesBaseName", "Aetheria-AI-v1.0")
+        setProperty("archivesBaseName", "Raven-v1.0")
     }
 
     buildTypes {

@@ -1,38 +1,34 @@
 package com.aetheria.ai.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
-private val DarkColorScheme = darkColorScheme(
-    primary = AccentCyan,
-    secondary = PurpleGrey80,
-    tertiary = AccentGreen,
-    background = DarkBackground,
-    surface = DarkSurface,
-    surfaceVariant = DarkCard,
-    onPrimary = DarkBackground,
-    onBackground = TextPrimary,
-    onSurface = TextPrimary
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+private val RavenColorScheme = darkColorScheme(
+    primary = RavenViolet,
+    onPrimary = RavenTextPrimary,
+    primaryContainer = RavenAmethyst.copy(alpha = 0.2f),
+    onPrimaryContainer = RavenTextPrimary,
+    secondary = RavenCyan,
+    onSecondary = RavenVoid,
+    secondaryContainer = RavenCyan.copy(alpha = 0.2f),
+    tertiary = RavenEmerald,
+    background = RavenVoid,
+    surface = RavenSurface,
+    surfaceVariant = RavenCard,
+    onBackground = RavenTextPrimary,
+    onSurface = RavenTextPrimary,
+    onSurfaceVariant = RavenTextSecondary,
+    outline = RavenBorder
 )
 
 @Composable
 fun AetheriaTheme(
-    darkTheme: Boolean = true, // Default to sleek modern dark AI theme
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = RavenColorScheme,
         typography = Typography,
         content = content
     )

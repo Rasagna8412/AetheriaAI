@@ -1,21 +1,34 @@
 package com.aetheria.ai.ui.screens.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +42,7 @@ fun ChatScreen(
     viewModel: ChatViewModel,
     onNavigateToModelHub: () -> Unit
 ) {
+    val context = LocalContext.current
     val isOnline by viewModel.isOnline.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val customModels by viewModel.customModels.collectAsState()
@@ -41,242 +55,295 @@ fun ChatScreen(
     val listState = rememberLazyListState()
 
     LaunchedEffect(messages.size, currentStreamingText) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size)
+        if (messages.isNotEmpty() || currentStreamingText.isNotEmpty()) {
+            listState.animateScrollToItem((messages.size).coerceAtLeast(0))
         }
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Aetheria AI",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isOnline) AccentGreen else Color(0xFFFF9800))
+            Surface(
+                color = RavenVoid,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(width = 0.5.dp, color = RavenBorder, shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Brand Logo & Network Status
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(RavenBrandGradient),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Raven",
+                                tint = RavenTextPrimary,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
                             Text(
-                                text = if (isOnline) "Online" else "Offline Mode",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isOnline) AccentGreen else Color(0xFFFF9800)
+                                text = "Raven",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = RavenTextPrimary,
+                                letterSpacing = 0.5.sp
                             )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isOnline) RavenEmerald else RavenAmber)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isOnline) "Online Mode" else "100% Offline Mode",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isOnline) RavenEmerald else RavenAmber
+                                )
+                            }
                         }
                     }
-                },
-                actions = {
-                    // Active Model Selector Pill
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { showModelMenu = true },
-                        color = DarkCard
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val (modelName, isLocal) = when (val m = selectedModel) {
-                                is SelectedModel.Offline -> Pair(m.model.name, true)
-                                is SelectedModel.Online -> Pair(m.model.name, false)
-                            }
-                            Icon(
-                                imageVector = if (isLocal) Icons.Default.PhoneAndroid else Icons.Default.CloudQueue,
-                                contentDescription = null,
-                                tint = if (isLocal) AccentCyan else AccentPurple,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = modelName.take(16),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TextPrimary
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = TextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
 
-                        DropdownMenu(
-                            expanded = showModelMenu,
-                            onDismissRequest = { showModelMenu = false }
+                    // Action controls
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Model Switcher Pill
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { showModelMenu = true }
+                                .border(0.8.dp, RavenBorder, RoundedCornerShape(20.dp)),
+                            color = RavenCard
                         ) {
-                            Text(
-                                text = "📱 Offline Models (On-Device)",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AccentCyan
-                            )
-                            DefaultOnDemandCatalog.models.forEach { model ->
-                                DropdownMenuItem(
-                                    text = { Text("${model.name} (${model.sizeFormatted})") },
-                                    leadingIcon = { Icon(Icons.Default.DownloadDone, null, tint = AccentCyan) },
-                                    onClick = {
-                                        viewModel.selectModel(SelectedModel.Offline(model))
-                                        showModelMenu = false
-                                    }
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val (modelName, isLocal) = when (val m = selectedModel) {
+                                    is SelectedModel.Offline -> Pair(m.model.name, true)
+                                    is SelectedModel.Online -> Pair(m.model.name, false)
+                                }
+                                Icon(
+                                    imageVector = if (isLocal) Icons.Default.PhoneAndroid else Icons.Default.CloudQueue,
+                                    contentDescription = null,
+                                    tint = if (isLocal) RavenCyan else RavenAmethyst,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = modelName.take(13),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = RavenTextPrimary
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = RavenTextSecondary,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
 
-                            Divider(modifier = Modifier.padding(vertical = 4.dp))
-
-                            Text(
-                                text = "☁️ Online Models (${customModels.size}/100)",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AccentPurple
-                            )
-                            if (customModels.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("No online models added yet. Tap to add.") },
-                                    leadingIcon = { Icon(Icons.Default.Add, null) },
-                                    onClick = {
-                                        showModelMenu = false
-                                        onNavigateToModelHub()
-                                    }
+                            DropdownMenu(
+                                expanded = showModelMenu,
+                                onDismissRequest = { showModelMenu = false },
+                                modifier = Modifier.background(RavenCard).border(1.dp, RavenBorder, RoundedCornerShape(12.dp))
+                            ) {
+                                Text(
+                                    text = "📱 OFFLINE GGUF MODELS",
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = RavenCyan
                                 )
-                            } else {
-                                customModels.forEach { model ->
+                                DefaultOnDemandCatalog.models.forEach { model ->
                                     DropdownMenuItem(
-                                        text = { Text("${model.name} [${model.modelId}]") },
-                                        leadingIcon = { Icon(Icons.Default.Cloud, null, tint = AccentPurple) },
+                                        text = {
+                                            Column {
+                                                Text(model.name, fontWeight = FontWeight.SemiBold, color = RavenTextPrimary)
+                                                Text("${model.sizeFormatted} • ${model.quantization}", style = MaterialTheme.typography.labelSmall, color = RavenTextSecondary)
+                                            }
+                                        },
+                                        leadingIcon = { Icon(Icons.Default.DownloadDone, null, tint = RavenCyan) },
                                         onClick = {
-                                            viewModel.selectModel(SelectedModel.Online(model))
+                                            viewModel.selectModel(SelectedModel.Offline(model))
                                             showModelMenu = false
                                         }
                                     )
                                 }
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = RavenBorder)
+
+                                Text(
+                                    text = "☁️ ONLINE CLOUD MODELS (${customModels.size}/100)",
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = RavenAmethyst
+                                )
+                                if (customModels.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("+ Add Custom Model (Up to 100)", color = RavenCyan) },
+                                        leadingIcon = { Icon(Icons.Default.AddCircleOutline, null, tint = RavenCyan) },
+                                        onClick = {
+                                            showModelMenu = false
+                                            onNavigateToModelHub()
+                                        }
+                                    )
+                                } else {
+                                    customModels.forEach { model ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(model.name, fontWeight = FontWeight.SemiBold, color = RavenTextPrimary)
+                                                    Text("${model.providerType} • ${model.modelId}", style = MaterialTheme.typography.labelSmall, color = RavenTextSecondary)
+                                                }
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Cloud, null, tint = RavenAmethyst) },
+                                            onClick = {
+                                                viewModel.selectModel(SelectedModel.Online(model))
+                                                showModelMenu = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
 
-                    IconButton(onClick = onNavigateToModelHub) {
-                        Icon(Icons.Default.Hub, contentDescription = "Model Hub", tint = TextPrimary)
+                        // Hub navigation button
+                        IconButton(
+                            onClick = onNavigateToModelHub,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(RavenCard)
+                                .border(0.8.dp, RavenBorder, CircleShape)
+                        ) {
+                            Icon(Icons.Default.Hub, contentDescription = "Model Hub", tint = RavenCyan, modifier = Modifier.size(18.dp))
+                        }
                     }
-                    IconButton(onClick = { viewModel.clearChat() }) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = "Clear Chat", tint = TextSecondary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBackground)
-            )
+                }
+            }
         },
-        containerColor = DarkBackground
+        containerColor = RavenVoid
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Chat message list
+            // Chat messages list
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 14.dp),
                 state = listState,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp)
             ) {
+                // Empty state greeting
                 if (messages.isEmpty() && currentStreamingText.isEmpty()) {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 80.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    tint = AccentCyan,
-                                    modifier = Modifier.size(54.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "Welcome to Aetheria AI",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Offline on-device inference + Up to 100 cloud models.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary
-                                )
+                        EmptyStateRavenHero(
+                            onSelectPrompt = { prompt ->
+                                viewModel.sendMessage(prompt)
                             }
-                        }
+                        )
                     }
                 }
 
                 items(messages) { msg ->
-                    ChatBubble(message = msg)
+                    RavenChatBubble(
+                        message = msg,
+                        onCopy = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Raven AI", msg.content))
+                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 }
 
                 if (isGenerating && currentStreamingText.isNotEmpty()) {
                     item {
-                        StreamingBubble(text = currentStreamingText)
+                        RavenStreamingBubble(text = currentStreamingText)
                     }
                 }
             }
 
-            // Input Bar
+            // Floating Input Bar
             Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = DarkSurface,
-                tonalElevation = 8.dp
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .navigationBarsPadding(),
+                color = RavenCardElevated,
+                shape = RoundedCornerShape(28.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, RavenBorderLight)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(24.dp)),
-                        placeholder = { Text("Ask anything (offline or online)...", color = TextSecondary) },
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                "Message Raven (offline or online)...",
+                                color = RavenTextMuted,
+                                fontSize = 14.sp
+                            )
+                        },
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = DarkCard,
-                            unfocusedContainerColor = DarkCard,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedTextColor = RavenTextPrimary,
+                            unfocusedTextColor = RavenTextPrimary,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent
                         ),
                         maxLines = 4
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            val query = inputText
-                            inputText = ""
-                            viewModel.sendMessage(query)
-                        },
-                        enabled = inputText.isNotBlank() && !isGenerating,
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    val canSend = inputText.isNotBlank() && !isGenerating
+
+                    Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(42.dp)
                             .clip(CircleShape)
-                            .background(if (inputText.isNotBlank()) AccentCyan else DarkCard)
+                            .background(if (canSend) RavenBrandGradient else androidx.compose.ui.graphics.SolidColor(RavenCard))
+                            .clickable(enabled = canSend) {
+                                val query = inputText
+                                inputText = ""
+                                viewModel.sendMessage(query)
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Send,
+                            imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
-                            tint = if (inputText.isNotBlank()) DarkBackground else TextSecondary
+                            tint = if (canSend) RavenTextPrimary else RavenTextMuted,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -286,82 +353,229 @@ fun ChatScreen(
 }
 
 @Composable
-fun ChatBubble(message: ChatMessageEntity) {
+fun EmptyStateRavenHero(
+    onSelectPrompt: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 40.dp, bottom = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Glowing Hero Icon
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(RavenBrandGradient)
+                .shadow(elevation = 20.dp, shape = RoundedCornerShape(26.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.AutoAwesome,
+                contentDescription = null,
+                tint = RavenTextPrimary,
+                modifier = Modifier.size(38.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Text(
+            text = "Raven AI",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = RavenTextPrimary,
+            letterSpacing = 1.sp
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Dual-Engine: 100% Offline GGUF + Up to 100 Cloud Models",
+            style = MaterialTheme.typography.bodyMedium,
+            color = RavenTextSecondary
+        )
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Quick starter prompts
+        Text(
+            text = "TRY ASKING",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = RavenTextMuted,
+            letterSpacing = 1.5.sp
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        val prompts = listOf(
+            "⚡ Write a clean Kotlin coroutine flow",
+            "🐬 Roleplay a futuristic space navigator",
+            "🧠 Explain quantum computing simply",
+            "📴 What are the benefits of offline AI?"
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            prompts.forEach { prompt ->
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = RavenCard,
+                    border = androidx.compose.foundation.BorderStroke(0.8.dp, RavenBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onSelectPrompt(prompt) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = prompt,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = RavenTextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowOutward,
+                            contentDescription = null,
+                            tint = RavenCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RavenChatBubble(
+    message: ChatMessageEntity,
+    onCopy: () -> Unit
+) {
     val isUser = message.role == "user"
+
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp
-            ),
-            color = if (isUser) AccentCyan.copy(alpha = 0.2f) else DarkCard,
-            modifier = Modifier.widthIn(max = 320.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                if (!isUser) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (message.isOffline) Icons.Default.PhoneAndroid else Icons.Default.CloudQueue,
-                            contentDescription = null,
-                            tint = if (message.isOffline) AccentCyan else AccentPurple,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = message.modelUsed,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary,
-                            fontSize = 10.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
+        if (isUser) {
+            // User message bubble with gradient
+            Surface(
+                shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
+                color = Color.Transparent,
+                modifier = Modifier
+                    .widthIn(max = 300.dp)
+                    .background(RavenUserBubbleGradient, RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp))
+                    .padding(14.dp)
+            ) {
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary
+                    color = Color.White,
+                    lineHeight = 22.sp
                 )
+            }
+        } else {
+            // Assistant message bubble
+            Surface(
+                shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
+                color = RavenCard,
+                border = androidx.compose.foundation.BorderStroke(1.dp, RavenBorderLight),
+                modifier = Modifier.widthIn(max = 330.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    // Header badge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (message.isOffline) Icons.Default.PhoneAndroid else Icons.Default.CloudQueue,
+                                contentDescription = null,
+                                tint = if (message.isOffline) RavenCyan else RavenAmethyst,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = message.modelUsed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (message.isOffline) RavenCyan else RavenAmethyst
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onCopy,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy",
+                                tint = RavenTextMuted,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = RavenTextPrimary,
+                        lineHeight = 22.sp
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun StreamingBubble(text: String) {
+fun RavenStreamingBubble(text: String) {
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterStart
     ) {
         Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = DarkCard,
-            modifier = Modifier.widthIn(max = 320.dp)
+            shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
+            color = RavenCard,
+            border = androidx.compose.foundation.BorderStroke(1.dp, RavenCyan.copy(alpha = 0.5f)),
+            modifier = Modifier.widthIn(max = 330.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(12.dp),
                         strokeWidth = 2.dp,
-                        color = AccentCyan
+                        color = RavenCyan
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Generating tokens...",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                        fontSize = 10.sp
+                        text = "Raven generating response...",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = RavenCyan
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary
+                    color = RavenTextPrimary,
+                    lineHeight = 22.sp
                 )
             }
         }

@@ -16,7 +16,7 @@ import com.aetheria.ai.ui.screens.chat.ChatViewModel
 import com.aetheria.ai.ui.screens.hub.ModelHubScreen
 import com.aetheria.ai.ui.screens.hub.ModelHubViewModel
 import com.aetheria.ai.ui.theme.AetheriaTheme
-import com.aetheria.ai.ui.theme.DarkBackground
+import com.aetheria.ai.ui.theme.RavenVoid
 
 class MainActivity : ComponentActivity() {
 
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
             AetheriaTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = DarkBackground
+                    color = RavenVoid
                 ) {
                     val navController = rememberNavController()
 

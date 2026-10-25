@@ -1,5 +1,7 @@
 package com.aetheria.ai.ui.screens.hub
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -29,11 +33,11 @@ data class ProviderTemplate(
 )
 
 val PROVIDER_TEMPLATES = listOf(
-    ProviderTemplate("DeepSeek (V3/R1)", "OPENAI_COMPATIBLE", "https://api.deepseek.com/v1", "deepseek-chat", "DeepSeek Chat"),
+    ProviderTemplate("DeepSeek (V3 / R1)", "OPENAI_COMPATIBLE", "https://api.deepseek.com/v1", "deepseek-chat", "DeepSeek Chat"),
     ProviderTemplate("Groq (Ultra-Fast LPU)", "OPENAI_COMPATIBLE", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", "Groq Llama 3.3"),
     ProviderTemplate("Google Gemini", "GEMINI", "https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash", "Gemini 2.5 Flash"),
     ProviderTemplate("OpenAI", "OPENAI_COMPATIBLE", "https://api.openai.com/v1", "gpt-4o-mini", "GPT-4o Mini"),
-    ProviderTemplate("OpenRouter", "OPENAI_COMPATIBLE", "https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct", "OpenRouter Llama"),
+    ProviderTemplate("OpenRouter", "OPENAI_COMPATIBLE", "https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct", "OpenRouter Multi-Model"),
     ProviderTemplate("Ollama (Local Network)", "OPENAI_COMPATIBLE", "http://10.0.2.2:11434/v1", "llama3.2:1b", "Local Ollama Llama 3.2"),
     ProviderTemplate("Custom Endpoint", "OPENAI_COMPATIBLE", "", "", "Custom Agent")
 )
@@ -63,35 +67,43 @@ fun AddModelDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = DarkSurface,
+            shape = RoundedCornerShape(24.dp),
+            color = RavenCardElevated,
+            border = androidx.compose.foundation.BorderStroke(1.dp, RavenBorderLight),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp)
+                .padding(6.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(22.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Add Custom Cloud Model",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary)
+                    Column {
+                        Text(
+                            text = "Add Cloud Model",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = RavenTextPrimary
+                        )
+                        Text(
+                            text = "Slot capacity: Up to 100 models",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = RavenCyan
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = RavenTextSecondary)
                     }
                 }
 
-                Text("1. Quick Provider Preset", style = MaterialTheme.typography.labelMedium, color = AccentCyan)
+                Text("1. Quick Provider Preset", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = RavenViolet)
 
                 // Provider Preset Selector
                 var templateExpanded by remember { mutableStateOf(false) }
@@ -105,22 +117,26 @@ fun AddModelDialog(
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                             .fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentCyan,
-                            unfocusedBorderColor = DarkCard,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
+                            focusedContainerColor = RavenSurface,
+                            unfocusedContainerColor = RavenSurface,
+                            focusedBorderColor = RavenViolet,
+                            unfocusedBorderColor = RavenBorder,
+                            focusedTextColor = RavenTextPrimary,
+                            unfocusedTextColor = RavenTextPrimary
                         )
                     )
                     ExposedDropdownMenu(
                         expanded = templateExpanded,
-                        onDismissRequest = { templateExpanded = false }
+                        onDismissRequest = { templateExpanded = false },
+                        modifier = Modifier.background(RavenCard)
                     ) {
                         PROVIDER_TEMPLATES.forEachIndexed { index, item ->
                             DropdownMenuItem(
-                                text = { Text(item.title) },
+                                text = { Text(item.title, color = RavenTextPrimary) },
                                 onClick = {
                                     selectedTemplateIndex = index
                                     modelName = item.defaultName
@@ -134,18 +150,21 @@ fun AddModelDialog(
                     }
                 }
 
-                Text("2. Model Details", style = MaterialTheme.typography.labelMedium, color = AccentCyan)
+                Text("2. Model Configuration", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = RavenViolet)
 
                 OutlinedTextField(
                     value = modelName,
                     onValueChange = { modelName = it },
                     label = { Text("Display Name") },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentCyan,
-                        unfocusedBorderColor = DarkCard,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedContainerColor = RavenSurface,
+                        unfocusedContainerColor = RavenSurface,
+                        focusedBorderColor = RavenViolet,
+                        unfocusedBorderColor = RavenBorder,
+                        focusedTextColor = RavenTextPrimary,
+                        unfocusedTextColor = RavenTextPrimary
                     )
                 )
 
@@ -153,12 +172,15 @@ fun AddModelDialog(
                     value = modelId,
                     onValueChange = { modelId = it },
                     label = { Text("Model ID (e.g. gpt-4o, deepseek-chat)") },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentCyan,
-                        unfocusedBorderColor = DarkCard,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedContainerColor = RavenSurface,
+                        unfocusedContainerColor = RavenSurface,
+                        focusedBorderColor = RavenViolet,
+                        unfocusedBorderColor = RavenBorder,
+                        focusedTextColor = RavenTextPrimary,
+                        unfocusedTextColor = RavenTextPrimary
                     )
                 )
 
@@ -166,12 +188,15 @@ fun AddModelDialog(
                     value = baseUrl,
                     onValueChange = { baseUrl = it },
                     label = { Text("Base API URL") },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentCyan,
-                        unfocusedBorderColor = DarkCard,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedContainerColor = RavenSurface,
+                        unfocusedContainerColor = RavenSurface,
+                        focusedBorderColor = RavenViolet,
+                        unfocusedBorderColor = RavenBorder,
+                        focusedTextColor = RavenTextPrimary,
+                        unfocusedTextColor = RavenTextPrimary
                     )
                 )
 
@@ -185,41 +210,58 @@ fun AddModelDialog(
                             Icon(
                                 if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                 contentDescription = null,
-                                tint = TextSecondary
+                                tint = RavenTextSecondary
                             )
                         }
                     },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentCyan,
-                        unfocusedBorderColor = DarkCard,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedContainerColor = RavenSurface,
+                        unfocusedContainerColor = RavenSurface,
+                        focusedBorderColor = RavenViolet,
+                        unfocusedBorderColor = RavenBorder,
+                        focusedTextColor = RavenTextPrimary,
+                        unfocusedTextColor = RavenTextPrimary
                     )
                 )
 
                 OutlinedTextField(
                     value = systemPrompt,
                     onValueChange = { systemPrompt = it },
-                    label = { Text("System Instructions (Optional)") },
+                    label = { Text("System Persona Prompt (Optional)") },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentCyan,
-                        unfocusedBorderColor = DarkCard,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedContainerColor = RavenSurface,
+                        unfocusedContainerColor = RavenSurface,
+                        focusedBorderColor = RavenViolet,
+                        unfocusedBorderColor = RavenBorder,
+                        focusedTextColor = RavenTextPrimary,
+                        unfocusedTextColor = RavenTextPrimary
                     )
                 )
 
-                // Category selection
-                Text("Category / Persona", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                // Category chips
+                Text("Tag / Persona", style = MaterialTheme.typography.labelSmall, color = RavenTextSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("General", "Coding", "Creative", "Roleplay").forEach { cat ->
                         FilterChip(
                             selected = category == cat,
                             onClick = { category = cat },
-                            label = { Text(cat, fontSize = 12.sp) }
+                            label = { Text(cat, fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = RavenViolet,
+                                selectedLabelColor = RavenTextPrimary,
+                                containerColor = RavenSurface,
+                                labelColor = RavenTextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = category == cat,
+                                borderColor = RavenBorder
+                            )
                         )
                     }
                 }
@@ -227,15 +269,17 @@ fun AddModelDialog(
                 // Test Connection Feedback
                 testResultText?.let { result ->
                     Surface(
-                        color = DarkCard,
-                        shape = RoundedCornerShape(8.dp),
+                        color = RavenSurface,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, RavenBorder),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = result,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (result.startsWith("Connected")) AccentGreen else MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(8.dp)
+                            fontWeight = FontWeight.Medium,
+                            color = if (result.startsWith("Connected")) RavenEmerald else RavenRose,
+                            modifier = Modifier.padding(10.dp)
                         )
                     }
                 }
@@ -264,12 +308,14 @@ fun AddModelDialog(
                             }
                         },
                         enabled = !isTesting && baseUrl.isNotBlank() && modelId.isNotBlank(),
-                        modifier = Modifier.weight(1f)
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, RavenBorder)
                     ) {
                         if (isTesting) {
-                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = RavenCyan)
                         } else {
-                            Text("Test Ping")
+                            Text("Test Ping", color = RavenCyan)
                         }
                     }
 
@@ -287,8 +333,9 @@ fun AddModelDialog(
                             onSave(entity)
                         },
                         enabled = baseUrl.isNotBlank() && modelId.isNotBlank(),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentCyan, contentColor = DarkBackground)
+                        colors = ButtonDefaults.buttonColors(containerColor = RavenViolet, contentColor = RavenTextPrimary)
                     ) {
                         Text("Save Model", fontWeight = FontWeight.Bold)
                     }

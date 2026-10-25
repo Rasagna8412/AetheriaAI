@@ -9,7 +9,7 @@ async def test_root():
         response = await client.get("/")
         assert response.status_code == 200
         data = response.json()
-        assert "Aetheria AI" in data["message"]
+        assert "Raven AI" in data["message"]
 
 @pytest.mark.asyncio
 async def test_health():

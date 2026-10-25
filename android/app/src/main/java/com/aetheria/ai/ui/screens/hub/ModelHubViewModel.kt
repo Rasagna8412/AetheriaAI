@@ -21,10 +21,13 @@ class ModelHubViewModel(
     private val _onDemandModels = MutableStateFlow<List<OnDemandModel>>(
         DefaultOnDemandCatalog.models.map { model ->
             if (modelDownloader.isModelDownloaded(model)) {
+                val file = modelDownloader.getLocalModelFile(model)
                 model.copy(
                     status = DownloadStatus.DOWNLOADED,
                     downloadProgress = 1f,
-                    localFilePath = modelDownloader.getLocalModelFile(model).absolutePath
+                    downloadedBytes = file.length(),
+                    totalBytes = file.length(),
+                    localFilePath = file.absolutePath
                 )
             } else {
                 model
@@ -75,13 +78,18 @@ class ModelHubViewModel(
 
     fun downloadOnDemandModel(model: OnDemandModel) {
         viewModelScope.launch {
+            updateOnDemandModelInList(
+                model.copy(status = DownloadStatus.DOWNLOADING, downloadProgress = 0f, errorMessage = null)
+            )
+
             modelDownloader.downloadModel(model) { progress, downloaded, total ->
                 updateOnDemandModelInList(
                     model.copy(
                         status = DownloadStatus.DOWNLOADING,
                         downloadProgress = progress,
                         downloadedBytes = downloaded,
-                        totalBytes = total
+                        totalBytes = total,
+                        errorMessage = null
                     )
                 )
             }.onSuccess { file ->
@@ -89,13 +97,34 @@ class ModelHubViewModel(
                     model.copy(
                         status = DownloadStatus.DOWNLOADED,
                         downloadProgress = 1f,
-                        localFilePath = file.absolutePath
+                        downloadedBytes = file.length(),
+                        totalBytes = file.length(),
+                        localFilePath = file.absolutePath,
+                        errorMessage = null
                     )
                 )
-            }.onFailure {
-                updateOnDemandModelInList(model.copy(status = DownloadStatus.ERROR))
+            }.onFailure { err ->
+                val errorMsg = err.localizedMessage ?: err.message ?: "Download failed"
+                updateOnDemandModelInList(
+                    model.copy(
+                        status = DownloadStatus.ERROR,
+                        downloadProgress = 0f,
+                        errorMessage = errorMsg
+                    )
+                )
             }
         }
+    }
+
+    fun cancelDownload(model: OnDemandModel) {
+        modelDownloader.cancelDownload(model.id)
+        updateOnDemandModelInList(
+            model.copy(
+                status = DownloadStatus.NOT_DOWNLOADED,
+                downloadProgress = 0f,
+                errorMessage = "Download canceled"
+            )
+        )
     }
 
     fun deleteOnDemandModel(model: OnDemandModel) {
@@ -105,7 +134,9 @@ class ModelHubViewModel(
                 model.copy(
                     status = DownloadStatus.NOT_DOWNLOADED,
                     downloadProgress = 0f,
-                    localFilePath = null
+                    downloadedBytes = 0L,
+                    localFilePath = null,
+                    errorMessage = null
                 )
             )
         }

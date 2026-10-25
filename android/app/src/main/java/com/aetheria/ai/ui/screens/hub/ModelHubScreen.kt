@@ -219,6 +219,7 @@ fun ModelHubScreen(
                             RavenOfflineCard(
                                 model = model,
                                 onDownload = { viewModel.downloadOnDemandModel(model) },
+                                onCancel = { viewModel.cancelDownload(model) },
                                 onDelete = { viewModel.deleteOnDemandModel(model) }
                             )
                         }
@@ -363,6 +364,7 @@ fun ModelHubScreen(
 fun RavenOfflineCard(
     model: OnDemandModel,
     onDownload: () -> Unit,
+    onCancel: () -> Unit,
     onDelete: () -> Unit
 ) {
     Surface(
@@ -455,12 +457,27 @@ fun RavenOfflineCard(
                 }
                 DownloadStatus.DOWNLOADING -> {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        val downloadedMB = model.downloadedBytes / (1024 * 1024)
+                        val totalMB = model.totalBytes / (1024 * 1024)
+                        val percent = (model.downloadProgress * 100).toInt()
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Downloading Hugging Face weights...", style = MaterialTheme.typography.labelSmall, color = RavenTextSecondary)
-                            Text("${(model.downloadProgress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = RavenCyan)
+                            Text(
+                                text = if (totalMB > 0) "$downloadedMB MB / $totalMB MB ($percent%)" else "Connecting to CDN...",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = RavenCyan
+                            )
+                            TextButton(
+                                onClick = onCancel,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Cancel", color = RavenRose, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         LinearProgressIndicator(
@@ -498,14 +515,36 @@ fun RavenOfflineCard(
                     }
                 }
                 DownloadStatus.ERROR -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Download interrupted", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
-                        Button(onClick = onDownload) {
-                            Text("Retry")
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        model.errorMessage?.let { error ->
+                            Surface(
+                                color = RavenRose.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Error: $error",
+                                    color = RavenRose,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Download failed", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+                            Button(
+                                onClick = onDownload,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = RavenViolet)
+                            ) {
+                                Text("Retry Download", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

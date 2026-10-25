@@ -83,6 +83,20 @@ class ChatViewModel(
 
             when (val model = _selectedModel.value) {
                 is SelectedModel.Offline -> {
+                    if (!modelDownloader.isModelDownloaded(model.model)) {
+                        val helperMsg = "⚠️ **${model.model.name}** is not downloaded to this device yet.\n\nTo use this model 100% offline:\n1. Open the **Model Hub** (tap the Hub icon in top right).\n2. Tap **Download Model** (${model.model.sizeFormatted}).\n\n*(Or select a Cloud Model from the top dropdown to chat online right now!)*"
+                        val assistantMessage = ChatMessageEntity(
+                            sessionId = currentSessionId.value,
+                            role = "assistant",
+                            content = helperMsg,
+                            modelUsed = model.model.name,
+                            isOffline = true
+                        )
+                        chatDao.insertMessage(assistantMessage)
+                        _isGenerating.value = false
+                        return@launch
+                    }
+
                     val file = modelDownloader.getLocalModelFile(model.model)
                     val responseBuffer = StringBuilder()
 
@@ -111,6 +125,20 @@ class ChatViewModel(
                 is SelectedModel.Online -> {
                     if (!isOnline.value) {
                         _currentStreamingText.value = "Device is currently offline. Please connect to internet or switch to an Offline model."
+                        _isGenerating.value = false
+                        return@launch
+                    }
+
+                    if (model.model.apiKey.isBlank()) {
+                        val helperMsg = "⚠️ API Key required for **${model.model.name}**.\n\nPlease open the **Model Hub**, edit this model, and enter your API key to chat with cloud models."
+                        val assistantMessage = ChatMessageEntity(
+                            sessionId = currentSessionId.value,
+                            role = "assistant",
+                            content = helperMsg,
+                            modelUsed = model.model.name,
+                            isOffline = false
+                        )
+                        chatDao.insertMessage(assistantMessage)
                         _isGenerating.value = false
                         return@launch
                     }

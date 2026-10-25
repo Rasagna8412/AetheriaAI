@@ -169,8 +169,11 @@ class CloudApiClient {
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                if (t != null) {
-                    trySend("\n[Error: ${t.message}]")
+                if (response != null && !response.isSuccessful) {
+                    val body = try { response.body?.string()?.take(200) } catch (_: Exception) { "" }
+                    trySend("\n[HTTP Error ${response.code}: ${if (body.isNullOrEmpty()) response.message else body}]")
+                } else if (t != null) {
+                    trySend("\n[Network Error: ${t.localizedMessage ?: t.message}]")
                 }
                 close(t)
             }

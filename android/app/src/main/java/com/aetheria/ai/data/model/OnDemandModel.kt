@@ -23,7 +23,8 @@ data class OnDemandModel(
     val downloadedBytes: Long = 0L,
     val totalBytes: Long = 0L,
     val status: DownloadStatus = DownloadStatus.NOT_DOWNLOADED,
-    val localFilePath: String? = null
+    val localFilePath: String? = null,
+    val errorMessage: String? = null
 )
 
 object DefaultOnDemandCatalog {

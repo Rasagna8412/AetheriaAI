@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 class ModelHubViewModel(
     private val customModelDao: CustomModelDao,
     private val modelDownloader: ModelDownloader,
-    private val cloudApiClient: CloudApiClient
+    val cloudApiClient: CloudApiClient
 ) : ViewModel() {
 
     private val _onDemandModels = MutableStateFlow<List<OnDemandModel>>(
